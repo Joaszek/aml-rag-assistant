@@ -1,0 +1,10 @@
+services:
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+    - "6333:6333"
+    volumes:
+    - db_qdrant:/var/lib/qdrant
+
+volumes:
+  db_qdrant:

@@ -1,0 +1,752 @@
+typologies:
+
+  - name: peel_chain
+    display_name: Peel Chain
+    asset: bitcoin
+    graph_level: "transaction -> address"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      A peel chain is one of the most recognisable Bitcoin money-laundering
+      constructs. A single illicit UTXO is "peeled" across a long linear
+      sequence of transactions: each hop spends the full prior output, sending
+      a small amount to a cash-out address while routing the bulk to the next
+      carry-forward address. The pattern creates a directed path in the
+      transaction graph with near-zero branching. Fan-out at each intermediate
+      transaction is exactly two (one peel output, one carry-forward output),
+      while fan-in is always one. Note that these fan values describe
+      transaction-level structure — the number of inputs and outputs per
+      transaction — not degree in an address-level or cluster-level graph.
+      Blockchain surveillance tools identify peel chains by detecting long
+      sequences of one-input two-output transactions where one output closely
+      matches the input minus fees. The carry-forward address is frequently
+      freshly generated (no prior on-chain activity), and the peel outputs
+      often aggregate at a final consolidation node before an exchange deposit.
+      Clustering coefficient computed on the address-level projection of such
+      a chain is near zero because no two intermediate addresses share a common
+      transaction neighbour; however, this metric is not meaningful in the raw
+      bipartite UTXO graph (addresses and transactions as separate node types)
+      where triangles cannot form by construction. AML analysts encounter peel
+      chains most often in ransomware proceeds, darknet market disbursements,
+      and exchange-hack dispersal. Heuristic clustering (common-input-ownership)
+      is ineffective here because each transaction has a single input; address
+      reuse is also absent, defeating simple address-cluster approaches.
+    structural_signature:
+      fan_in_ratio: "low (=1 input per transaction in the chain)"
+      fan_out_ratio: "exactly 2 outputs per hop (carry-forward + peel)"
+      diameter_range: "20-200+ transactions"
+      clustering_coef: "near zero in address-level projection; not meaningful in raw bipartite UTXO graph"
+      chain_depth: "very deep (linear path, 20-200+ hops)"
+      other_signals:
+        - "dominant-value carry-forward visible at each transaction step"
+        - "peel outputs are a small fraction of carry-forward value [illustrative: 0.1-10%]"
+        - "freshly generated carry-forward addresses (no prior on-chain activity)"
+        - "terminal consolidation node before exchange deposit"
+    example_references:
+      - source: "FATF (2020). Virtual Assets Red Flag Indicators of Money Laundering and Terrorist Financing"
+        page_or_section: "Section 3: Red Flags Related to Transaction Patterns"
+      - source: "Chainalysis Crypto Crime Report 2022"
+        page_or_section: "Chapter 3: Ransomware Laundering Patterns"
+    tags: ["layering", "bitcoin", "utxo", "peel-chain", "linear-topology"]
+
+  - name: fan_in_consolidation
+    display_name: Fan-In Consolidation (Aggregation of Dispersed Funds)
+    asset: bitcoin
+    graph_level: "transaction -> address"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      Fan-in consolidation describes the aggregation phase of a multi-step
+      laundering strategy: many UTXOs, previously dispersed across numerous
+      source wallets (often created during an earlier structuring or smurfing
+      phase), are swept into a single consolidation transaction with one or a
+      few outputs. This typology is distinct from smurfing or structuring, which
+      refer to the preceding dispersal phase (breaking a large amount into many
+      small transfers); fan-in consolidation is the complementary collection
+      step. The defining structural signature is at the transaction level: a
+      single consolidation transaction consumes many inputs from distinct
+      sending addresses, all arriving at a single output or tight cluster. In
+      Bitcoin, actors break illicit funds into many wallets (often automated)
+      and schedule periodic consolidation sweeps, after which the consolidated
+      output is forwarded to an exchange or OTC desk. Graph indicators include:
+      high in-degree on the consolidation transaction, very low out-degree
+      post-consolidation, source addresses with no shared on-chain history
+      (purpose-created mule wallets), and minimised fees via batching. The
+      common-input-ownership heuristic fires strongly at the consolidation
+      transaction, linking all source addresses into a single attributed cluster.
+      Temporal signals reinforce the pattern: inputs arrive in a compressed
+      time window before consolidation, suggesting automated scripted operation.
+      AML analysts must distinguish this from legitimate exchange hot-wallet
+      consolidations; the key discriminator is whether source addresses have a
+      plausible economic origin. Clustering coefficient in the address-level
+      projection is near zero because source addresses have no mutual connections
+      outside the single consolidation transaction.
+    structural_signature:
+      fan_in_ratio: "very high (many inputs per consolidation transaction; [illustrative: >50])"
+      fan_out_ratio: "low (1-3 outputs)"
+      diameter_range: "2-4 hops (source -> consolidation -> off-ramp)"
+      clustering_coef: "near zero in address-level projection; source addresses have no mutual connections"
+      chain_depth: "shallow (1-2 layers)"
+      other_signals:
+        - "source wallets show no prior mutual transactions"
+        - "source wallets created in a burst shortly before consolidation"
+        - "compressed temporal arrival window on inputs (hours to days)"
+        - "common-input-ownership heuristic links all inputs at consolidation transaction"
+        - "single large UTXO output forwarded immediately to exchange"
+    example_references:
+      - source: "FATF (2020). Virtual Assets Red Flag Indicators of Money Laundering and Terrorist Financing"
+        page_or_section: "Section 3: Red Flags Related to Transaction Patterns (structuring and multiple transfers)"
+      - source: "FinCEN Advisory FIN-2019-A003 on Illicit Activity Involving Convertible Virtual Currency"
+        page_or_section: "Section III: Peer-to-Peer Exchangers and Convertible Virtual Currency Kiosks"
+    tags: ["placement", "layering", "bitcoin", "utxo", "consolidation", "smurfing"]
+
+  - name: mixer_layering
+    display_name: Mixer Layering (CoinJoin-Based)
+    asset: bitcoin
+    graph_level: "transaction -> address"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      Mixer layering exploits CoinJoin-style protocols — including Wasabi
+      Wallet's ZeroLink, JoinMarket, and centralised mixing services — to
+      sever the on-chain link between source and destination funds. In a
+      CoinJoin transaction, multiple participants combine their UTXOs into a
+      single transaction with equal-denomination outputs, making deterministic
+      input-output linkage infeasible and highly uncertain without additional
+      heuristics or off-chain data. This is a probabilistic and combinatorial
+      property, not a cryptographic impossibility; heuristic demixing attacks
+      remain possible but degrade with each successive round. For AML purposes,
+      the structural signature of mixer use is recognisable at the transaction
+      level: a large-fanin, large-fanout transaction with many equal-value
+      outputs (the mix round), after which funds re-emerge at fresh addresses.
+      An illicit actor will typically chain multiple mix rounds to increase
+      the anonymity set. Analysts observe paths of the form: source wallet ->
+      pre-mix address -> CoinJoin transaction(s) -> post-mix address -> off-ramp.
+      Key transaction-level indicators are equal-denomination outputs, high
+      in-degree and out-degree coinciding in the same transaction, and a
+      sudden emergence of addresses that share a transaction despite having no
+      other shared history. Clustering coefficient is not a reliable signal
+      here: in a bipartite UTXO graph, triangles cannot form by construction,
+      so any clustering value is entirely dependent on the chosen projection
+      and is not directly comparable across studies. Blockchain forensics tools
+      apply heuristic demixing based on UTXO-amount tracing and timing
+      correlation. FATF guidance and FinCEN advisories specifically flag mixing
+      services as high-risk; several mixing service operators have faced OFAC
+      sanctions.
+    structural_signature:
+      fan_in_ratio: "high (5-100 participant inputs per mix round)"
+      fan_out_ratio: "high (equal to fan-in; equal-denomination outputs)"
+      diameter_range: "4-10 transactions (including multiple mix rounds)"
+      clustering_coef: "not reliable / graph-projection dependent; bipartite UTXO graph contains no triangles by construction"
+      chain_depth: "medium (2-5 layers between illicit source and off-ramp)"
+      other_signals:
+        - "equal-denomination outputs at mixing transaction"
+        - "no change output (or small residual)"
+        - "post-mix addresses have no prior on-chain activity"
+        - "Wasabi/JoinMarket transaction fingerprints identifiable by input count and denomination structure"
+    example_references:
+      - source: "FATF (2021). Updated Guidance for a Risk-Based Approach to Virtual Assets and Virtual Asset Service Providers"
+        page_or_section: "Section 5: Red Flags and Indicators — Mixers and Tumblers"
+      - source: "FinCEN Advisory FIN-2019-A003 on Illicit Activity Involving Convertible Virtual Currency"
+        page_or_section: "Section IV: Mixers and Tumblers"
+    tags: ["layering", "bitcoin", "coinjoin", "mixer", "utxo", "anonymity-set"]
+
+  - name: exchange_hopping
+    display_name: Exchange Hopping
+    asset: bitcoin
+    graph_level: "address -> cluster"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      Exchange hopping is a layering technique in which illicit funds are
+      moved sequentially through multiple cryptocurrency exchanges — often
+      crossing asset types and jurisdictions — to obscure the origin and
+      complicate asset-tracing. A typical pattern: Bitcoin from illicit source
+      -> Exchange A (conversion to Monero or Litecoin) -> Exchange B (conversion
+      back to Bitcoin) -> Exchange C (conversion to stablecoin or fiat
+      withdrawal). Each exchange hop introduces a new custodial intermediary
+      that may or may not cooperate with law enforcement, and conversions
+      between assets sever UTXO-level tracing entirely. From a cluster-graph
+      perspective, exchange nodes act as high-degree hub vertices, absorbing
+      many inflows and emitting many outflows; individual actors are invisible
+      inside the exchange's pooled hot wallets. Effective exchange hopping
+      therefore exploits the commingling of funds in exchange hot wallets to
+      defeat address-cluster attribution. The relevant graph level for analysis
+      is the address-cluster graph, not the raw UTXO graph: at the cluster
+      level, the pattern appears as a short directed path through exchange-cluster
+      nodes. AML red flags include rapid sequential deposits and withdrawals at
+      multiple exchanges within a short time window, use of exchanges with weak
+      or no KYC, conversion through privacy coins as intermediate assets, and
+      patterns where the fiat-equivalent value deposited equals the equivalent
+      withdrawn minus fees — suggesting pass-through rather than investment
+      activity. Investigators rely on subpoenas, MLA requests, or voluntary
+      exchange cooperation to lift the veil at each hop. Clustering coefficient
+      within the inter-exchange path is low; the exchange cluster hub topology
+      is locally tree-like between hops.
+    structural_signature:
+      fan_in_ratio: "low per exchange entry (1-3 deposit addresses per actor per hop)"
+      fan_out_ratio: "low per exchange exit (1-2 withdrawal addresses per actor per hop)"
+      diameter_range: "3-8 hops (including 2-4 exchange hops)"
+      clustering_coef: "low; exchange cluster hub topology is locally tree-like between hops"
+      chain_depth: "medium"
+      other_signals:
+        - "rapid deposit-withdrawal cycles at each exchange (minutes to hours)"
+        - "asset-type changes at each hop (BTC -> XMR -> BTC)"
+        - "exchange hot-wallet cluster addresses attributable via blockchain intelligence providers"
+        - "KYC-weak or no-KYC exchanges preferentially selected"
+    example_references:
+      - source: "FATF (2020). Virtual Assets Red Flag Indicators of Money Laundering and Terrorist Financing"
+        page_or_section: "Section 4: Red Flags Related to Geographical Risks"
+      - source: "Europol IOCTA 2021: Internet Organised Crime Threat Assessment"
+        page_or_section: "Section 2.3: Cryptocurrency Laundering Techniques"
+    tags: ["layering", "bitcoin", "exchange", "hopping", "cross-asset", "jurisdiction"]
+
+  - name: structuring
+    display_name: Structuring (Bitcoin-Native)
+    asset: bitcoin
+    graph_level: "transaction -> address"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      Bitcoin-native structuring replicates the traditional cash-structuring
+      offence by deliberately breaking a large illicit Bitcoin amount into
+      many sub-threshold transactions to avoid triggering automated reporting
+      rules or blockchain heuristics keyed to large-value transfers. Unlike
+      fan-in consolidation (which aggregates many small amounts), structuring
+      focuses on the withdrawal or off-ramp side: the actor sends many
+      individually small amounts to exchanges or OTC desks, each below a
+      chosen threshold, to stay under exchange-level AML triggers. Structuring
+      may also target on-chain analytics heuristics: amounts are sized to fall
+      below large-transaction alert thresholds used by blockchain surveillance
+      vendors. Graph signatures at the transaction level include: many outbound
+      edges from a source wallet, all carrying similar small amounts within a
+      narrow range, dispatched to a collection of distinct exchange deposit
+      addresses within a compressed time window. The source wallet typically
+      receives a single large inflow shortly before the dispersal begins.
+      In contrast to peel chains, structuring produces a star-shaped fan-out
+      rather than a linear path. Clustering coefficient in the address-level
+      projection is near zero because the star fan-out topology creates no
+      connections between destination addresses. Distinguishing structuring
+      from legitimate batch payments requires analysis of amount distributions
+      (structuring amounts cluster near but below round-number thresholds),
+      temporal patterns, and whether destination addresses resolve to the same
+      exchange cluster. Because each individual transaction is below alerting
+      thresholds, pattern-of-activity monitoring across a rolling time window
+      is the primary detection mechanism recommended by FinCEN guidance on
+      digital asset structuring.
+    structural_signature:
+      fan_in_ratio: "low (1-2 inputs; single source wallet)"
+      fan_out_ratio: "high (many sub-threshold outputs; [illustrative: 10-100])"
+      diameter_range: "2-3 hops (source -> structured sends -> exchange)"
+      clustering_coef: "near zero; star fan-out topology with no inter-spoke connections"
+      chain_depth: "shallow (star topology)"
+      other_signals:
+        - "output amounts cluster tightly below a round-number threshold"
+        - "all destination addresses resolve to same exchange cluster"
+        - "sends dispatched in rapid automated sequence"
+        - "source wallet received single large inflow immediately prior"
+    example_references:
+      - source: "31 U.S.C. Section 5324 (Anti-Structuring Statute)"
+        page_or_section: "Statutory definition of structuring"
+      - source: "FATF (2020). Virtual Assets Red Flag Indicators of Money Laundering and Terrorist Financing"
+        page_or_section: "Section 3: Red Flags Related to Transaction Patterns (multiple transfers and structuring)"
+    tags: ["placement", "structuring", "bitcoin", "utxo", "threshold-evasion"]
+
+  - name: ransomware_payout
+    display_name: Ransomware Payout Dispersal
+    asset: bitcoin
+    graph_level: "address -> cluster"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      Ransomware payout dispersal is a post-extortion layering pattern in
+      which Bitcoin ransom payments, received at unique per-victim addresses,
+      are aggregated and then laundered through a structured pipeline to convert
+      proceeds to fiat or privacy coins. The pipeline typically follows:
+      victim payment address -> aggregation wallet (consolidating multiple
+      victims) -> mixer or exchange hop -> OTC conversion. The per-victim
+      address architecture means each entry node typically receives a small
+      number of payments — often one victim payment per unique deposit address,
+      though some campaigns reuse addresses across victims — and the aggregation
+      step creates a consolidation node that serves as the ransomware operator's
+      collection point. Blockchain analysts can identify ransomware wallets
+      through attribution databases (e.g., Chainalysis Reactor tags, OFAC SDN
+      list entries for REvil, Conti, DarkSide), and tracing downstream from
+      tagged addresses frequently reveals the dispersal pipeline. Temporal
+      patterns are distinctive: victim payments arrive irregularly (tied to
+      incident response timelines), while aggregation and laundering steps
+      occur in batch sweeps at regular intervals (daily, weekly). Payment
+      amounts often correspond to declared ransom demands, enabling correlation
+      with law-enforcement incident reports. Recovered case studies (Colonial
+      Pipeline, Kaseya VSA) reveal that even sophisticated operators make
+      attribution errors — reusing intermediate addresses or consolidating
+      through attributable exchanges. AML compliance teams at exchanges should
+      apply enhanced due diligence to inbound transactions traceable within a
+      few hops to known ransomware seed addresses, as these represent
+      high-confidence illicit proceeds regardless of intervening layering steps.
+    structural_signature:
+      fan_in_ratio: "usually low; typically one victim payment per unique deposit address"
+      fan_out_ratio: "low post-aggregation (2-5 outputs to mixer/exchange)"
+      diameter_range: "4-8 hops (victim -> aggregation -> layering -> off-ramp)"
+      clustering_coef: "near zero between victim input nodes; not meaningful in raw UTXO graph"
+      chain_depth: "medium"
+      other_signals:
+        - "per-victim unique deposit address with low prior on-chain activity"
+        - "payment amounts correlate with disclosed ransom demands"
+        - "aggregation sweep transactions occur in regular batch intervals"
+        - "downstream addresses match OFAC/Chainalysis ransomware cluster tags"
+    example_references:
+      - source: "DOJ Press Release: U.S. Government Recovers Majority of Colonial Pipeline Ransom"
+        page_or_section: "June 7, 2021"
+      - source: "Chainalysis Crypto Crime Report 2023"
+        page_or_section: "Chapter 2: Ransomware — Laundering Patterns"
+    tags: ["layering", "bitcoin", "ransomware", "extortion", "aggregation"]
+
+  - name: darknet_marketplace_consolidation
+    display_name: Darknet Marketplace Consolidation
+    asset: bitcoin
+    graph_level: "address -> cluster"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      Darknet marketplace consolidation describes the laundering pipeline
+      operated by darknet market (DNM) administrators and vendors, who receive
+      large volumes of small Bitcoin payments from buyers and must convert
+      proceeds to usable fiat or privacy assets. From a cluster-graph
+      perspective, a DNM operator's wallet cluster displays an extremely high
+      aggregate fan-in: thousands of buyer payment addresses each forwarding
+      small amounts to vendor wallets, which in turn forward to administrator
+      escrow wallets, which are ultimately consolidated and sent to laundering
+      pipelines. The UTXO graph of a DNM cluster resembles a multi-tier
+      pyramid: buyer -> vendor -> escrow -> consolidation -> off-ramp.
+      The primary diagnostic structural feature is in-degree concentration at
+      successive pyramid tiers, not clustering coefficient: "clustering
+      coefficient" in the graph-theoretic sense is not a reliable signal here
+      and is projection-dependent. Clustering heuristics (common-input-ownership,
+      change-address detection) are especially powerful because DNM platforms
+      typically batch-process vendor payouts, co-signing many inputs in a single
+      transaction and inadvertently linking the entire vendor payout pool into
+      one attributed cluster. Temporal signals include high transaction velocity
+      correlated with DNM operating hours and sudden cessation corresponding to
+      exit scams or law enforcement takedowns (Silk Road, AlphaBay, Hydra).
+      The multi-tier structure means that seizure at a vendor tier captures only
+      a fraction of proceeds; maximum recovery requires tracing to the
+      administrator consolidation layer before the operator sweeps to a
+      non-cooperative exchange or mixer.
+    structural_signature:
+      fan_in_ratio: "very high aggregate across cluster (thousands of buyer inputs)"
+      fan_out_ratio: "low at top of pyramid (1-10 laundering wallet outputs)"
+      diameter_range: "4-8 hops (buyer -> vendor -> escrow -> consolidation -> off-ramp)"
+      clustering_coef: "not primary diagnostic signal; in-degree concentration at pyramid tiers is the key structural feature"
+      chain_depth: "medium (3-4 tiers in the pyramid)"
+      other_signals:
+        - "transaction velocity correlated with DNM operating hours"
+        - "common-input-ownership heuristic links entire payout batch to one cluster"
+        - "known DNM deposit address tags available from blockchain intelligence databases"
+        - "sudden activity cessation consistent with law enforcement takedown or exit scam"
+    example_references:
+      - source: "FATF (2020). Virtual Assets Red Flag Indicators of Money Laundering and Terrorist Financing"
+        page_or_section: "Section 2: Red Flags Related to Source of Funds (darknet market proceeds)"
+      - source: "IRS-CI Press Release: Hydra Market Takedown"
+        page_or_section: "April 5, 2022"
+    tags: ["layering", "bitcoin", "darknet", "marketplace", "aggregation", "utxo"]
+
+  - name: scam_consolidation
+    display_name: Scam Consolidation (Investment/Romance Fraud)
+    asset: bitcoin
+    graph_level: "address -> cluster"
+    confidence: medium
+    threshold_type: heuristic
+    description: >
+      Scam consolidation covers the post-fraud laundering of proceeds from
+      investment scams (pig-butchering / sha zhu pan), romance fraud, Ponzi
+      schemes, and advance-fee fraud. Victims are socially engineered into
+      sending Bitcoin to scam-controlled addresses; these victim deposits are
+      then consolidated and laundered before investigators can freeze assets.
+      The graph topology at the address and cluster level differs from DNM
+      consolidation in scale and entry-point behaviour: victim payments are
+      typically larger (USD thousands to millions per victim) and fewer in
+      number than DNM micro-transactions. The consolidation node receives large
+      Bitcoin amounts from geographically diverse victim addresses, then funnels
+      proceeds through a short layering chain to an OTC desk or exchange.
+      A key forensic marker is the temporal correlation between a scam
+      campaign's social-engineering phase and the onset of victim deposits:
+      deposits begin immediately after victim contact, often at receiving
+      addresses with zero prior blockchain history. AML typology reports note
+      that scam proceeds are among the fastest-laundered illicit funds —
+      operators sweep victim deposits within hours to minimise seizure exposure.
+      Pig-butchering operations further complicate tracing by routing proceeds
+      through high-risk jurisdiction OTC desks outside mainstream AML reporting
+      frameworks. Effective countermeasures combine real-time blockchain
+      monitoring for rapid asset-freezing requests, victim-amount correlation
+      analysis to cluster scam-controlled wallets, and cross-border law
+      enforcement cooperation to reach OTC desk operators. The extremely short
+      dwell time of funds at victim-deposit addresses means timely victim
+      reporting to national financial intelligence units is critical to any
+      prospect of asset recovery.
+    structural_signature:
+      fan_in_ratio: "medium (10-500 victim payments, each typically larger than DNM micro-transactions)"
+      fan_out_ratio: "low (1-5 outputs to OTC/exchange)"
+      diameter_range: "3-6 hops"
+      clustering_coef: "near zero at address level; victim input addresses have no mutual connections"
+      chain_depth: "shallow to medium (2-4 layers)"
+      other_signals:
+        - "victim deposit addresses have zero or minimal prior on-chain history"
+        - "deposit amounts correlate with declared fraud losses in IC3/Interpol reports"
+        - "rapid sweep to layering wallet (often within hours of deposit)"
+        - "OTC desks in high-risk jurisdictions as off-ramp"
+    example_references:
+      - source: "FBI IC3 Annual Report 2023"
+        page_or_section: "Cryptocurrency Investment Fraud section"
+      - source: "Chainalysis Crypto Crime Report 2023"
+        page_or_section: "Chapter 5: Scams — Pig Butchering and Investment Fraud"
+    tags: ["placement", "bitcoin", "scam", "fraud", "pig-butchering", "romance-fraud", "consolidation"]
+
+  - name: round_trip_layering
+    display_name: Round-Trip Layering
+    asset: bitcoin
+    graph_level: "cluster"
+    confidence: medium
+    threshold_type: heuristic
+    description: >
+      Round-trip layering is an integration-stage technique in which illicit
+      Bitcoin is sent out and returned — via a series of intermediary
+      transactions, often crossing multiple exchanges, wallets, or even
+      blockchains — so that the destination is economically or legally
+      connected to the apparent "investor" or "business owner", creating a
+      false appearance of legitimate income. The essence is circular value
+      flow: funds originate at wallet A, traverse a layering path through B,
+      C, D, and return in a transformed form (different asset, currency, or
+      via a different legal entity) to wallet A or an address controlled by
+      the same actor. A critical graph-theoretic note: Bitcoin's UTXO graph
+      is strictly acyclic by design — each UTXO can only be spent once.
+      Apparent cycles emerge only after projecting the UTXO graph onto the
+      address-cluster level and weighting directed edges by value flow; it is
+      exclusively in this cluster-level projection that the round-trip pattern
+      becomes visible as a directed cycle. Clustering coefficient is therefore
+      not a primary diagnostic signal; cycle detection in the cluster-level
+      value-flow graph is the key structural indicator. Specific indicators
+      include: addresses in the alleged "payment received" cluster sharing
+      common-input-ownership signatures with the original sending cluster,
+      timing patterns consistent with deliberate round-trip design (fixed
+      intervals between outbound send and inbound receipt), and value
+      near-equivalence between outbound and inbound amounts minus fees. This
+      typology is associated with self-laundering by exchange operators, Ponzi
+      scheme operators recycling deposits as apparent returns, and tax fraud
+      schemes fabricating capital-gains histories.
+    structural_signature:
+      fan_in_ratio: "low (1-3 per hop in the cycle)"
+      fan_out_ratio: "low (1-3 per hop)"
+      diameter_range: "4-12 hops forming a cycle at cluster level"
+      clustering_coef: "not primary signal; cycle detection in cluster-level graph is the key indicator"
+      cycle_presence: "directed cycle detectable in cluster-level value-flow projection (not in raw UTXO DAG which is acyclic)"
+      chain_depth: "medium (cycle path length 4-12)"
+      other_signals:
+        - "directed value-flow cycle visible in address-cluster graph projection"
+        - "near-equivalent outbound and inbound values (minus fees)"
+        - "fixed temporal interval between outbound send and inbound receipt"
+        - "common-input-ownership links alleged sender and receiver clusters"
+    example_references:
+      - source: "FATF (2018). Professional Money Laundering"
+        page_or_section: "Section 4: Techniques — Round-Tripping and Circular Transactions"
+      - source: "UNODC (2020). Cyber-Enabled Financial Crime"
+        page_or_section: "Case studies on round-trip layering"
+    tags: ["integration", "bitcoin", "round-trip", "cycle", "layering"]
+
+  - name: nested_exchange_abuse
+    display_name: Nested Exchange Abuse
+    asset: bitcoin
+    graph_level: "cluster"
+    confidence: medium
+    threshold_type: heuristic
+    description: >
+      Nested exchange abuse exploits the practice of smaller brokers,
+      OTC desks, and fintech startups accessing liquidity by routing their
+      customer orders through a large, regulated exchange's infrastructure —
+      becoming "nested" within the parent exchange's deposit address space.
+      From an on-chain perspective, the nested entity's customer deposits and
+      withdrawals appear as transactions to and from the parent exchange's
+      known hot-wallet cluster, making them indistinguishable from legitimate
+      retail customers. AML red flags arise when the nested entity has
+      inadequate KYC, services high-risk geographies, or knowingly accepts
+      criminal proceeds. Blockchain forensics can identify nested abuse
+      patterns by analysing transaction velocity and value distribution
+      anomalies within a parent exchange's deposit cluster: legitimate retail
+      flows follow predictable distributions, while nested illicit flows may
+      show bulk transfers in atypical amounts, unusual timing, or clustering
+      around known illicit source addresses. Regulators (FinCEN, FCA, AUSTRAC)
+      have issued guidance requiring exchanges to perform due diligence on
+      nested counterparties equivalent to correspondent banking under FATF
+      Recommendation 13. Parent exchanges bear secondary AML liability if they
+      fail to assess the controls of nested counterparties before accepting
+      their flow. Transaction monitoring rules should flag when a single nested
+      sub-account generates disproportionate volumes relative to its declared
+      business model. The 2023 FinCEN action against Bitzlato illustrates how
+      a nested laundromat can process billions in illicit proceeds while
+      obscured within a larger exchange's infrastructure, accepting criminal
+      proceeds and operating without adequate AML controls.
+    structural_signature:
+      fan_in_ratio: "high at parent exchange deposit cluster (aggregates nested and retail flows)"
+      fan_out_ratio: "high at parent exchange withdrawal cluster"
+      diameter_range: "2-4 hops (illicit source -> nested entity -> parent exchange -> withdrawal)"
+      clustering_coef: "high within parent exchange cluster by design; not diagnostic for nested abuse specifically"
+      chain_depth: "shallow (2-3 layers)"
+      other_signals:
+        - "illicit source addresses traceable to known-bad clusters before entering parent exchange"
+        - "nested entity deposit addresses share parent exchange cluster attribution"
+        - "abnormal bulk transfer sizes or timing compared to retail baseline within cluster"
+        - "nested entity registered in high-risk or non-compliant jurisdiction"
+    example_references:
+      - source: "FinCEN (2023). Identification of Bitzlato Limited as a Primary Money Laundering Concern"
+        page_or_section: "Section 311 Action — Findings on nested exchange operations"
+      - source: "Chainalysis (2022). Geography of Cryptocurrency Report"
+        page_or_section: "Chapter: Nested Services and High-Risk Exchanges"
+    tags: ["layering", "bitcoin", "exchange", "nested", "correspondent-banking", "OTC"]
+
+  - name: peeling_with_consolidation
+    display_name: Peeling with Consolidation (Hybrid Chain)
+    asset: bitcoin
+    graph_level: "transaction -> address -> cluster"
+    confidence: medium
+    threshold_type: heuristic
+    description: >
+      Peeling with consolidation is a hybrid pattern that combines the linear
+      peeling structure with periodic consolidation nodes, producing a
+      tree-shaped or spine-with-ribs graph topology. The actor begins with
+      multiple illicit source UTXOs, runs parallel peel chains for a set number
+      of hops to distribute risk, then consolidates the parallel chain tips into
+      a single address before continuing. This is operationally motivated:
+      consolidation reduces the number of UTXOs an actor must manage, while the
+      peeling phase provides layering depth. The resulting transaction graph is
+      intermediate between a pure linear peel chain and a pure fan-in
+      consolidation: it has medium chain depth, periodic high-fanin transactions
+      at consolidation steps, and near-zero clustering in the address-level
+      projection between consolidation stages. AML analysts must identify the
+      consolidation epochs — the periodic transactions where multiple peel chain
+      tips merge — as these are the highest-attribution-value nodes in the
+      subgraph. The common-input-ownership heuristic fires at each consolidation
+      epoch, linking previously unrelated peel chains into a single attributed
+      cluster and often multiplying the provable asset base by the number of
+      parallel chains collapsed at that node. The interval between consolidation
+      epochs (measured in transaction count or elapsed time) reflects operational
+      security choices and may indicate automated scheduling; variations in this
+      interval can signal a change in operator or tooling. Analysts should
+      prioritise identifying and dating these consolidation epochs when building
+      an asset-tracing timeline for prosecution or civil forfeiture proceedings.
+    structural_signature:
+      fan_in_ratio: "low during peel phase (=1 input per transaction); high at consolidation epochs ([illustrative: 5-50 inputs])"
+      fan_out_ratio: "exactly 2 during peel phase; low post-consolidation (1-3)"
+      diameter_range: "10-80 transactions with consolidation nodes every 10-20 hops [illustrative]"
+      clustering_coef: "near zero in address-level projection between consolidation epochs"
+      chain_depth: "deep with periodic consolidation resets"
+      other_signals:
+        - "common-input-ownership heuristic fires at consolidation transactions, linking parallel peel chains"
+        - "peel chain fingerprint (single-input, two-output, dominant carry-forward) in segments between epochs"
+        - "consolidation epoch interval may reveal automated scheduling pattern"
+        - "multiple parallel peel chains active simultaneously before each consolidation"
+    example_references:
+      - source: "Elliptic (2020). Bitcoin Money Laundering: Typologies and the Role of Blockchain Analytics"
+        page_or_section: "Section 3: Hybrid Layering Structures"
+      - source: "FATF (2020). Virtual Assets Red Flag Indicators of Money Laundering and Terrorist Financing"
+        page_or_section: "Section 3: Red Flags Related to Transaction Patterns"
+    tags: ["layering", "bitcoin", "peel-chain", "consolidation", "hybrid", "utxo"]
+
+  - name: p2p_layering
+    display_name: P2P Exchange Layering
+    asset: bitcoin
+    graph_level: "address -> cluster"
+    confidence: medium
+    threshold_type: heuristic
+    description: >
+      P2P exchange layering uses peer-to-peer trading platforms (LocalBitcoins,
+      Paxful, Bisq, and similar) as cash-out or layering mechanisms, exploiting
+      their reduced KYC requirements and large volumes of small trades conducted
+      with individual counterparties rather than centralised order books.
+      An illicit actor deposits Bitcoin to a P2P platform, lists sell offers,
+      and receives fiat from multiple individual buyers — effectively converting
+      Bitcoin to cash through a crowd of unwitting or complicit money mules.
+      From a cluster-graph perspective, the actor's selling wallet interacts
+      with many buyer addresses, each transaction reflecting a completed trade;
+      the aggregate pattern resembles a fan-out of medium-sized transfers to
+      diverse addresses. Critically, the buyer side is KYC-light, making
+      counterparty attribution difficult. AML indicators include: on-chain
+      deposits to known P2P platform escrow addresses, trade amounts clustering
+      at common P2P trade sizes, rapid turnover of platform escrow UTXOs, and
+      correlation of deposit timing with P2P platform escrow contract activity.
+      Clustering coefficient between buyer addresses is near zero because buyers
+      are unrelated counterparties with no mutual on-chain history.
+      Law-enforcement access to P2P platform records (where they exist) can
+      reveal buyer identities; P2P platforms with no records present a
+      significant investigative gap. LocalBitcoins implemented KYC in 2019 and
+      ultimately shut down in 2023; Bisq's decentralised design remains
+      structurally resistant to regulatory access. AML analysts investigating
+      P2P layering should combine blockchain tracing to the P2P escrow cluster
+      with any available off-chain records — IP addresses, phone numbers, bank
+      account details shared during trades — to identify counterparties who may
+      have acted as unwitting or complicit money mules.
+    structural_signature:
+      fan_in_ratio: "low at seller wallet (1-3 illicit source inputs)"
+      fan_out_ratio: "medium-high (many buyer counterparties per campaign; [illustrative: 20-200])"
+      diameter_range: "3-5 hops (illicit source -> seller wallet -> P2P escrow -> buyer)"
+      clustering_coef: "near zero between buyer addresses; buyers are unrelated counterparties"
+      chain_depth: "shallow (2-3 layers)"
+      other_signals:
+        - "deposits to known P2P platform escrow wallet cluster"
+        - "trade amounts at typical P2P sizes [illustrative: 0.01-0.5 BTC]"
+        - "rapid escrow UTXO turnover (locked/unlocked within minutes to hours)"
+        - "sustained high transaction volume at seller wallet during active campaign"
+    example_references:
+      - source: "FATF (2020). Virtual Assets Red Flag Indicators of Money Laundering and Terrorist Financing"
+        page_or_section: "Section 4: Red Flags Related to Geographical Risks (P2P exchange indicators)"
+      - source: "UNODC (2023). Casinos, Money Laundering, Underground Banking and Illicit Financial Flows in East and Southeast Asia"
+        page_or_section: "Section 4: Cryptocurrency and P2P Exchanges"
+    tags: ["layering", "bitcoin", "p2p", "exchange", "cash-out", "mule"]
+
+  - name: instant_exchange_abuse
+    display_name: Instant Exchange Abuse (No-KYC Swap Services)
+    asset: bitcoin
+    graph_level: "address -> cluster"
+    confidence: high
+    threshold_type: heuristic
+    description: >
+      Instant exchange abuse targets no-KYC or light-KYC swap services —
+      FixedFloat, ChangeNOW, SimpleSwap, SideShift, and similar — that allow
+      users to swap between cryptocurrencies without identity verification, API
+      keys, or account registration. These services act as frictionless
+      layering nodes: an actor deposits illicit Bitcoin, receives an equivalent
+      amount of Monero, Litecoin, or another asset at a fresh address, and the
+      on-chain link is severed by the service's internal accounting. The
+      blockchain footprint of instant exchange use is a short two-hop pattern
+      at the address-cluster level: illicit wallet -> instant exchange deposit
+      address -> instant exchange output address -> next-layer wallet. The
+      intermediate node (the instant exchange deposit address) is typically
+      attributable to the service via blockchain intelligence databases.
+      Repeated use of instant exchanges in a single pipeline creates a chain
+      of attributable exchange deposit events separated by asset-conversion
+      hops. Clustering coefficient is near zero throughout this linear chain
+      topology. From a detection standpoint, key signals are: UTXO
+      input-to-output delay matching the instant exchange's processing SLA,
+      destination address attribution to known swap service output clusters,
+      and sudden asset-type changes. Regulators have applied VASP registration
+      requirements to these services, leading to geographic displacement to
+      unregulated jurisdictions. Risk-scoring models for VASPs should assign
+      elevated risk weight to transactions originating from or destined for
+      known instant exchange output address clusters; a two-hop look-behind
+      from a deposit that passes through a recognised swap service is often
+      sufficient to identify the original illicit source, given that actors
+      rarely insert additional layering before using the swap service.
+    structural_signature:
+      fan_in_ratio: "low (1-2 inputs per swap transaction)"
+      fan_out_ratio: "low (1 swap output per transaction)"
+      diameter_range: "2-3 hops per swap; 4-12 hops for a multi-swap pipeline"
+      clustering_coef: "near zero; linear chain topology between swap hops"
+      chain_depth: "shallow per hop; medium for multi-hop pipeline"
+      other_signals:
+        - "deposit-to-withdrawal delay matches instant exchange processing SLA [illustrative: 5-30 min]"
+        - "asset type changes at each swap hop"
+        - "destination addresses attributed to known swap service output clusters"
+        - "no account registration or API key activity observable at service layer"
+    example_references:
+      - source: "FATF (2021). Updated Guidance for a Risk-Based Approach to Virtual Assets and Virtual Asset Service Providers"
+        page_or_section: "Section 5: Red Flags — Unhosted Wallets and Instant Exchange Services"
+      - source: "Elliptic (2022). DeFi: Risk, Regulation, and the Rise of DeCrime"
+        page_or_section: "Section 2: Instant Exchange and Swap Service Abuse"
+    tags: ["layering", "bitcoin", "instant-exchange", "no-KYC", "swap", "cross-asset"]
+
+  - name: defi_bridge_hopping
+    display_name: DeFi Bridge Hopping
+    asset: general
+    graph_level: "utxo (Bitcoin source) -> account (EVM destination); cross-chain"
+    confidence: medium
+    threshold_type: heuristic
+    description: >
+      DeFi bridge hopping uses cross-chain bridge protocols — Wormhole,
+      Multichain, Stargate, Thorchain RUNE swaps, Ren Protocol — to move
+      illicit value between blockchain networks, exploiting the absence of
+      KYC at the bridge layer and the added complexity of cross-chain tracing.
+      A typical laundering pipeline: illicit Bitcoin -> wrapped BTC on Ethereum
+      via a bridge -> swap to ETH or stablecoin via a DEX -> bridge to Arbitrum
+      or BSC -> cash out via a centralised exchange. Each bridge hop produces
+      a lock-and-mint or burn-and-release event on two different blockchains,
+      requiring investigators to correlate events across heterogeneous ledgers.
+      The graph representation shifts at each bridge boundary: Bitcoin uses a
+      UTXO model while EVM chains use an account model, so bridge hops appear
+      as apparent dead ends in the source-chain graph, with funds reappearing
+      as a new minting event on the destination chain. This cross-chain boundary
+      means clustering coefficient is not applicable across the bridge; within
+      each individual chain subgraph it is near zero given the linear hop
+      structure. Temporal correlation (near-equivalent amounts bridged within
+      the bridge's confirmation window) is the primary cross-chain linking
+      technique. AML signals include: deposits to known bridge contract
+      addresses without obvious DeFi investment context; subsequent DEX activity
+      on the destination chain immediately post-bridge; and multi-hop bridge
+      paths to increase forensic complexity. The Lazarus Group has been
+      extensively documented using bridge hopping following the Ronin bridge
+      hack, exploiting the forensic gap at chain boundaries.
+    structural_signature:
+      fan_in_ratio: "low (1-2 inputs per bridge transaction)"
+      fan_out_ratio: "low (1 mint or receive event per bridge hop)"
+      diameter_range: "4-12 hops across multiple chains"
+      clustering_coef: "not applicable across chain boundary; near zero within each chain subgraph"
+      chain_depth: "medium (2-5 bridge hops, each adding a new chain)"
+      other_signals:
+        - "lock event on source chain correlates temporally with mint on destination chain"
+        - "cross-chain amount near-equivalence (minus bridge fee)"
+        - "bridge contract addresses attributable via blockchain intelligence databases"
+        - "DEX swap activity immediately post-bridge on destination chain"
+    example_references:
+      - source: "UN Panel of Experts (2023). Report Pursuant to Resolution 1874 — DPRK Sanctions Evasion"
+        page_or_section: "Section III: Cryptocurrency Laundering and Sanctions Evasion"
+      - source: "Chainalysis Crypto Crime Report 2023"
+        page_or_section: "Chapter 7: DeFi and Cross-Chain Bridge Exploitation"
+    tags: ["layering", "bitcoin", "ethereum", "defi", "bridge", "cross-chain", "Lazarus"]
+
+  - name: coinjoin_unmixing_evasion
+    display_name: CoinJoin Unmixing Evasion (Post-Mix Behavioural Camouflage)
+    asset: bitcoin
+    graph_level: "transaction -> address"
+    confidence: medium
+    threshold_type: heuristic
+    description: >
+      CoinJoin unmixing evasion describes the set of post-mix operational
+      security behaviours adopted by sophisticated actors who are aware that
+      blockchain forensics tools attempt to heuristically demix CoinJoin
+      outputs by exploiting amount correlations, timing analysis, and address
+      reuse. After exiting a CoinJoin round, a careful actor implements
+      countermeasures: (1) introducing artificial time delays (hours to days)
+      between the CoinJoin output and subsequent transactions to defeat timing
+      correlation; (2) splitting post-mix outputs into multiple equal-value
+      sub-transactions (a secondary denomination pass) to destroy the
+      amount-correlation anchor; (3) routing post-mix outputs through
+      additional unrelated transactions to increase the anonymity set;
+      and (4) avoiding address reuse and common-input-ownership mistakes
+      when spending post-mix UTXOs. The resulting transaction graph has a
+      diffuse star structure after the mix: many post-mix outputs each
+      proceed through one or two intermediate transactions before arriving at
+      an off-ramp, but no structural link ties them together. Clustering
+      coefficient is not a meaningful signal here for the same reason as in
+      basic mixer layering: the bipartite UTXO graph contains no triangles by
+      construction, making any reported value projection-dependent. Post-mix
+      transactions often show amounts that are multiples of the CoinJoin
+      denomination, and temporal delay distributions may be unnaturally
+      uniform, consistent with automated tooling imposing deliberate jitter.
+      Demixing heuristics fail at high rates against this pattern; investigative
+      success relies primarily on off-chain intelligence (exchange KYC data,
+      IP correlation from wallet telemetry, or human intelligence).
+    structural_signature:
+      fan_in_ratio: "low post-mix (1 input per post-mix transaction)"
+      fan_out_ratio: "low to medium post-mix (1-4 outputs per transaction)"
+      diameter_range: "6-15 transactions (CoinJoin round + post-mix behavioural padding)"
+      clustering_coef: "not reliable / graph-projection dependent; bipartite UTXO graph contains no triangles by construction"
+      chain_depth: "medium to deep"
+      other_signals:
+        - "post-mix output amounts are multiples of the CoinJoin round denomination"
+        - "artificial and potentially uniform timing delays between post-mix hops (hours to days)"
+        - "no address reuse in post-mix transaction segment"
+        - "off-chain intelligence (KYC data, IP correlation) required for reliable attribution"
+    example_references:
+      - source: "Moser, M. & Bohme, R. (2017). Join Me on a Market for Anonymity. Workshop on the Economics of Information Security (WEIS)"
+        page_or_section: "Analysis of Bitcoin mixing market structures and post-mix evasion patterns"
+      - source: "Chainalysis Reactor Documentation"
+        page_or_section: "CoinJoin Demixing Heuristics"
+    tags: ["layering", "bitcoin", "coinjoin", "unmixing", "opsec", "anonymity-set", "post-mix"]

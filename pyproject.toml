@@ -1,0 +1,13 @@
+- unstructured[pdf]
+- langchain, langchain-community
+- llama-index, llama-index-vector-stores-qdrant
+- qdrant-client
+- FlagEmbedding
+- anthropic
+- fastapi, uvicorn
+- pydantic v2
+- ragas
+- diskcache
+- PyYAML
+- pytest
+- python-dotenv
